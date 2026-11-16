@@ -11,7 +11,6 @@ from app.services.segmentprofile import SegmentprofileService
 router = APIRouter(prefix="/api/segmentprofile", tags=["分群画像"])
 
 service = SegmentprofileService()
-
 LIST_FIELDS = ["画像编号", "分群名称", "筛选规则", "画像维度", "对比基准", "更新周期", "覆盖对象数", "画像快照"]
 STATUSES = ["草稿", "画像评审中", "已发布", "已下线"]
 
@@ -28,6 +27,20 @@ def list_entries(
         raise HTTPException(status_code=400, detail="每页最多 200 条，请缩小分页范围")
     items, total = service.list_entries(keyword=keyword, status=status, page=page, size=size)
     return PageResult(items=items, total=total, page=page, size=size)
+
+
+# 静态路径必须声明在 /{entry_id} 之前，否则 "attribution"、"export" 会被当成 entry_id 匹配。
+@router.get("/attribution/feed")
+def attribution_feed() -> dict[str, Any]:
+    """分群画像同步消费事件归因结果数据集：与事件分析、看板读取同一个结果版本。"""
+    return service.attribution_feed()
+
+
+@router.get("/export")
+def export_entries() -> dict[str, Any]:
+    """导出分群画像清单：返回当前过滤条件下的全量数据。"""
+    items, total = service.list_entries(page=1, size=10000)
+    return {"module": "segmentprofile", "total": total, "items": items}
 
 
 @router.get("/{entry_id}", response_model=dict)
@@ -56,10 +69,3 @@ def run_action(entry_id: int, payload: EntryPayload) -> ActionResult:
     if entry is None:
         return ActionResult(ok=False, message=message)
     return ActionResult(ok=True, message=message, entry=entry)
-
-
-@router.get("/export")
-def export_entries() -> dict[str, Any]:
-    """导出分群画像清单：返回当前过滤条件下的全量数据。"""
-    items, total = service.list_entries(page=1, size=10000)
-    return {"module": "segmentprofile", "total": total, "items": items}

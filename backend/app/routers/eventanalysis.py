@@ -6,6 +6,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Query
 
 from app.schemas import ActionResult, EntryPayload, PageResult
+from app.services.attribution import attribution_service
 from app.services.eventanalysis import EventanalysisService
 
 router = APIRouter(prefix="/api/eventanalysis", tags=["事件分析"])
@@ -28,6 +29,32 @@ def list_entries(
         raise HTTPException(status_code=400, detail="每页最多 200 条，请缩小分页范围")
     items, total = service.list_entries(keyword=keyword, status=status, page=page, size=size)
     return PageResult(items=items, total=total, page=page, size=size)
+
+
+# 静态路径统一声明在 /{entry_id} 之前，否则 "export"、"attribution" 会被当成 entry_id。
+@router.get("/attribution/runs")
+def attribution_runs(model_id: int | None = Query(default=None, description="可选，按模型过滤")) -> dict[str, Any]:
+    """归因运行历史：保留样本判定、置信区间口径与空态原因，保证可追溯。"""
+    items = attribution_service.list_runs(model_id)
+    return {"items": items, "total": len(items)}
+
+
+@router.post("/attribution/runs/{run_id}/retry", response_model=ActionResult)
+def retry_attribution(run_id: int) -> ActionResult:
+    """样本不足或窗口重叠失败后重试：从上一完整版本之后继续，不覆盖已可用数据集。"""
+    try:
+        record = attribution_service.retry_run(run_id)
+    except ValueError as exc:
+        return ActionResult(ok=False, message=str(exc))
+    ok = record["状态"] == "成功发布"
+    return ActionResult(ok=ok, message=record["空态说明"], entry=record)
+
+
+@router.get("/export")
+def export_entries() -> dict[str, Any]:
+    """导出事件分析清单：返回当前过滤条件下的全量数据。"""
+    items, total = service.list_entries(page=1, size=10000)
+    return {"module": "eventanalysis", "total": total, "items": items}
 
 
 @router.get("/{entry_id}", response_model=dict)
@@ -58,8 +85,22 @@ def run_action(entry_id: int, payload: EntryPayload) -> ActionResult:
     return ActionResult(ok=True, message=message, entry=entry)
 
 
-@router.get("/export")
-def export_entries() -> dict[str, Any]:
-    """导出事件分析清单：返回当前过滤条件下的全量数据。"""
-    items, total = service.list_entries(page=1, size=10000)
-    return {"module": "eventanalysis", "total": total, "items": items}
+@router.post("/{entry_id}/attribution/run", response_model=ActionResult)
+def run_attribution(entry_id: int, payload: EntryPayload | None = None) -> ActionResult:
+    """按归因窗口归并用户事件流并生成事件归因结果。
+
+    重叠窗口按唯一事件编号只归并一次；未达最小样本量/置信口径的分组不保存。
+    同一模型快照重复提交幂等返回已发布版本。
+    """
+    if service.get_entry(entry_id) is None:
+        return ActionResult(ok=False, message=f"分析模型 {entry_id} 不存在或已归档")
+    simulate_interrupt = bool((payload.values if payload else {}).get("simulate_interrupt"))
+    record = attribution_service.run_attribution(entry_id, simulate_interrupt=simulate_interrupt)
+    ok = record["状态"] == "成功发布"
+    return ActionResult(ok=ok, message=record["空态说明"], entry=record)
+
+
+@router.get("/{entry_id}/attribution/results")
+def attribution_results(entry_id: int) -> dict[str, Any]:
+    """事件分析侧读取归因结果：与分群画像、看板共用同一个当前结果版本。"""
+    return service.attribution_overview(entry_id)

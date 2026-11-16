@@ -33,3 +33,9 @@ body { margin: 0; background: #f6f8fb; color: #1f2937; }
 .link { border: none; background: none; color: var(--brand); cursor: pointer; padding: 0; }
 .page-foot { display: flex; justify-content: space-between; margin-top: 8px; font-size: 12px; color: var(--muted); }
 .error-text { color: #b42318; }
+.notice-text { color: #067647; background: #ecfdf3; border: 1px solid #abefc6; border-radius: 6px; padding: 8px 12px; font-size: 13px; }
+.sub-panel { background: #fff; border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; margin: 16px 0; }
+.sub-panel h3 { margin: 0 0 10px; font-size: 15px; }
+.sub-panel h4 { margin: 14px 0 6px; font-size: 13px; color: var(--muted); }
+.sub-panel-head { display: flex; justify-content: space-between; align-items: center; }
+.judgment-chip { display: inline-block; background: #f2f4f7; border-radius: 4px; padding: 2px 6px; margin: 1px 4px 1px 0; font-size: 12px; white-space: nowrap; }

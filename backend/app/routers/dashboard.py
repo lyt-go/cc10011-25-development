@@ -1,4 +1,4 @@
-"""监控大盘接口：维护大盘配置，覆盖提交大盘评审、发布大盘、下线大盘等动作。"""
+"""监控大盘接口：维护大盘配置，覆盖提交大盘评审、发布大盘、下线看板等动作。"""
 from __future__ import annotations
 
 from typing import Any
@@ -30,6 +30,20 @@ def list_entries(
     return PageResult(items=items, total=total, page=page, size=size)
 
 
+# 静态路径放在 /{entry_id} 之前，避免字面量被当成 entry_id 解析。
+@router.get("/attribution/panel")
+def attribution_panel(model_id: int | None = Query(default=None, description="可选，按模型过滤")) -> dict[str, Any]:
+    """看板读取事件归因结果数据集，与事件分析、分群画像共用同一个结果版本。"""
+    return service.attribution_panel(model_id)
+
+
+@router.get("/export")
+def export_entries() -> dict[str, Any]:
+    """导出监控大盘清单：返回当前过滤条件下的全量数据。"""
+    items, total = service.list_entries(page=1, size=10000)
+    return {"module": "dashboard", "total": total, "items": items}
+
+
 @router.get("/{entry_id}", response_model=dict)
 def get_entry(entry_id: int) -> dict:
     """读取单条大盘配置明细；不存在时给出可读的错误说明。"""
@@ -56,10 +70,3 @@ def run_action(entry_id: int, payload: EntryPayload) -> ActionResult:
     if entry is None:
         return ActionResult(ok=False, message=message)
     return ActionResult(ok=True, message=message, entry=entry)
-
-
-@router.get("/export")
-def export_entries() -> dict[str, Any]:
-    """导出监控大盘清单：返回当前过滤条件下的全量数据。"""
-    items, total = service.list_entries(page=1, size=10000)
-    return {"module": "dashboard", "total": total, "items": items}

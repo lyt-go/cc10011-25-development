@@ -40,12 +40,14 @@ const stats = [
 ]
 
 type Row = Record<string, string | number | null>
+type PanelResult = Record<string, string | number | string[]>
 
 export default function DashboardView() {
   const [rows, setRows] = useState<Row[]>([])
   const [total, setTotal] = useState(0)
   const [errorMessage, setErrorMessage] = useState('')
   const [filters, setFilters] = useState<Record<string, string>>({})
+  const [panel, setPanel] = useState<PanelResult[] | null>(null)
   const filterFields = useMemo(() => columns.slice(0, 3), [])
 
   const reload = useCallback(async () => {
@@ -63,6 +65,20 @@ export default function DashboardView() {
       setErrorMessage(error instanceof Error ? error.message : '监控大盘列表读取失败')
     }
   }, [filters])
+
+  const loadAttributionPanel = useCallback(async () => {
+    setErrorMessage('')
+    try {
+      const response = await request(`${ENDPOINT}/attribution/panel`)
+      if (!response.ok) {
+        throw new Error('归因结果面板读取失败')
+      }
+      const payload = await response.json()
+      setPanel(payload.结果 ?? [])
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : '监控大盘归因面板读取失败')
+    }
+  }, [])
 
   useEffect(() => {
     void reload()
@@ -152,6 +168,41 @@ export default function DashboardView() {
           )}
         </tbody>
       </table>
+
+      <section className="sub-panel">
+        <div className="sub-panel-head">
+          <h3>事件归因结果面板（与事件分析、分群画像读取同一结果版本）</h3>
+          <button className="btn" type="button" onClick={() => void loadAttributionPanel()}>刷新归因面板</button>
+        </div>
+        {panel === null ? (
+          <p className="empty-state">点击「刷新归因面板」加载已发布的事件归因结果（仅含通过样本准入的分组）。</p>
+        ) : panel.length === 0 ? (
+          <p className="empty-state">当前没有已发布的归因结果：上游分组未达最小样本量或置信口径，看板不展示未达标数据。</p>
+        ) : (
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>结果版本</th><th>模型编号</th><th>归因窗口</th><th>维度取值</th>
+                <th>样本量</th><th>均值</th><th>置信区间</th><th>置信水平</th>
+              </tr>
+            </thead>
+            <tbody>
+              {panel.map((r, idx) => (
+                <tr key={idx}>
+                  <td>v{String(r.结果版本)}</td>
+                  <td>{String(r.模型编号 ?? '—')}</td>
+                  <td>{String(r.归因窗口起点 ?? '—')} ~ {String(r.归因窗口结束 ?? '—')}</td>
+                  <td>{String(r.维度取值 ?? '—')}</td>
+                  <td>{String(r.样本量 ?? '—')}</td>
+                  <td>{String(r.均值 ?? '—')}</td>
+                  <td>[{String(r.置信区间下限 ?? '—')}, {String(r.置信区间上限 ?? '—')}]</td>
+                  <td>{String(r.置信水平 ?? '—')}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </section>
 
       <footer className="page-foot">
         <span>共 {total} 条监控大盘记录</span>

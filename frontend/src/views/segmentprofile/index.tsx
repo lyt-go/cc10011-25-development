@@ -40,12 +40,15 @@ const stats = [
 ]
 
 type Row = Record<string, string | number | null>
+type FeedResult = Record<string, string | number | string[]>
+type SyncLedger = Record<string, string | number>
 
 export default function SegmentprofileView() {
   const [rows, setRows] = useState<Row[]>([])
   const [total, setTotal] = useState(0)
   const [errorMessage, setErrorMessage] = useState('')
   const [filters, setFilters] = useState<Record<string, string>>({})
+  const [feed, setFeed] = useState<{ 当前结果: FeedResult[]; 同步台账: SyncLedger[] } | null>(null)
   const filterFields = useMemo(() => columns.slice(0, 3), [])
 
   const reload = useCallback(async () => {
@@ -63,6 +66,19 @@ export default function SegmentprofileView() {
       setErrorMessage(error instanceof Error ? error.message : '分群画像列表读取失败')
     }
   }, [filters])
+
+  const loadFeed = useCallback(async () => {
+    setErrorMessage('')
+    try {
+      const response = await request(`${ENDPOINT}/attribution/feed`)
+      if (!response.ok) {
+        throw new Error('归因结果同步数据读取失败')
+      }
+      setFeed(await response.json())
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : '分群画像同步数据读取失败')
+    }
+  }, [])
 
   useEffect(() => {
     void reload()
@@ -152,6 +168,72 @@ export default function SegmentprofileView() {
           )}
         </tbody>
       </table>
+
+      <section className="sub-panel">
+        <div className="sub-panel-head">
+          <h3>事件归因结果同步（下游画像消费，与事件分析、看板同一结果版本）</h3>
+          <button className="btn" type="button" onClick={() => void loadFeed()}>刷新同步数据</button>
+        </div>
+        {feed === null ? (
+          <p className="empty-state">点击「刷新同步数据」查看分群画像消费的归因结果数据集与同步台账。</p>
+        ) : (
+          <>
+            <h4>当前消费的归因结果（{feed.当前结果.length} 条）</h4>
+            {feed.当前结果.length === 0 ? (
+              <p className="empty-state">暂无可消费的归因结果：上游分组未达最小样本量或尚未发布，画像不会收到未达标结果。</p>
+            ) : (
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>结果版本</th><th>模型编号</th><th>维度取值</th><th>样本量</th>
+                    <th>均值</th><th>置信区间下限</th><th>置信区间上限</th><th>样本判定</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {feed.当前结果.map((r, idx) => (
+                    <tr key={idx}>
+                      <td>v{String(r.结果版本)}</td>
+                      <td>{String(r.模型编号 ?? '—')}</td>
+                      <td>{String(r.维度取值 ?? '—')}</td>
+                      <td>{String(r.样本量 ?? '—')}</td>
+                      <td>{String(r.均值 ?? '—')}</td>
+                      <td>{String(r.置信区间下限 ?? '—')}</td>
+                      <td>{String(r.置信区间上限 ?? '—')}</td>
+                      <td>{String(r.样本判定 ?? '—')}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+            <h4>同步台账（{feed.同步台账.length} 条，重复回写幂等）</h4>
+            {feed.同步台账.length === 0 ? (
+              <p className="empty-state">暂无同步台账记录。</p>
+            ) : (
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>同步编号</th><th>结果版本</th><th>模型编号</th><th>维度取值</th>
+                    <th>样本量</th><th>样本判定</th><th>同步时间</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {feed.同步台账.map((r) => (
+                    <tr key={String(r.id ?? r.同步编号)}>
+                      <td>{String(r.同步编号 ?? '—')}</td>
+                      <td>v{String(r.结果版本 ?? '—')}</td>
+                      <td>{String(r.模型编号 ?? '—')}</td>
+                      <td>{String(r.维度取值 ?? '—')}</td>
+                      <td>{String(r.样本量 ?? '—')}</td>
+                      <td>{String(r.样本判定 ?? '—')}</td>
+                      <td>{String(r.同步时间 ?? '—')}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </>
+        )}
+      </section>
 
       <footer className="page-foot">
         <span>共 {total} 条分群画像记录</span>

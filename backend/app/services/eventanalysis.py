@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.services.attribution import SNAPSHOT_FIELDS, attribution_service
 from app.store import store
 
 MODULE = "eventanalysis"
@@ -55,7 +56,29 @@ class EventanalysisService:
         target = ACTION_RULES[action]
         if target not in STATUS_ORDER:
             return None, f"目标状态「{target}」不在允许的状态序列里"
+        # 样本准入前置闸门：启用模型前必须固化七项归因配置，且数值口径合法。
+        if action == "启用模型":
+            snapshot, reason = attribution_service.build_snapshot(entry_id)
+            if snapshot is None:
+                return None, f"启用被样本准入规则拦截：{reason}"
         entry["status"] = target
         entry["pending"] = target != STATUS_ORDER[-1]
         entry["abnormal"] = action in NEGATIVE_ACTIONS
         return entry, f"分析模型已{action}"
+
+    def attribution_overview(self, entry_id: int) -> dict[str, Any]:
+        """事件分析读取归因结果的统一入口：只暴露当前结果版本，保证与画像、看板同版本。"""
+        entry = store.find(MODULE, entry_id)
+        if entry is None:
+            return {"ok": False, "message": f"分析模型 {entry_id} 不存在或已归档", "结果": [], "运行记录": []}
+        results = attribution_service.current_results(entry_id)
+        runs = attribution_service.list_runs(entry_id)
+        return {
+            "ok": True,
+            "模型id": entry_id,
+            "模型编号": entry.get("模型编号"),
+            "固化配置字段": SNAPSHOT_FIELDS,
+            "结果": results,
+            "结果条数": len(results),
+            "运行记录": runs,
+        }

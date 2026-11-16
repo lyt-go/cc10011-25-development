@@ -1,3 +1,5 @@
 fastapi>=0.110
 uvicorn[standard]>=0.29
 pydantic>=2.6
+# 事件归因回归测试只用标准库即可运行：python -m app.tests.test_attribution
+# 如偏好 pytest 收集，可自行 pip install pytest，用例同时兼容 unittest 与 pytest。

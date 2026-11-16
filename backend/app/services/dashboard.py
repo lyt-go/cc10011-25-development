@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.services.attribution import attribution_service
 from app.store import store
 
 MODULE = "dashboard"
@@ -59,3 +60,14 @@ class DashboardService:
         entry["pending"] = target != STATUS_ORDER[-1]
         entry["abnormal"] = action in NEGATIVE_ACTIONS
         return entry, f"大盘配置已{action}"
+
+    def attribution_panel(self, model_id: int | None = None) -> dict[str, Any]:
+        """看板读取事件归因结果：直接走统一的当前结果版本口径，与事件分析、分群画像同源。"""
+        results = attribution_service.current_results(model_id)
+        return {
+            "ok": True,
+            "读取口径": "attributionversion 当前结果版本",
+            "结果版本集合": sorted({int(r["结果版本"]) for r in results}),
+            "结果条数": len(results),
+            "结果": results,
+        }
